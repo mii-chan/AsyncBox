@@ -20,7 +20,7 @@ Keep asynchronous values and their loading lifecycle in one observable state.
 Add the following dependency to your `Package.swift` file:
 
 ```swift
-.package(url: "https://github.com/mii-chan/AsyncBox.git", from: "0.1.0")
+.package(url: "https://github.com/mii-chan/AsyncBox.git", from: "0.2.0")
 ```
 
 Add the products required by your target:
@@ -41,7 +41,7 @@ Add the products required by your target:
 
 1. In Xcode, select **File > Add Package Dependencies...**
 2. Enter the repository URL: `https://github.com/mii-chan/AsyncBox.git`
-3. Choose a **Dependency Rule** (e.g. **Up to Next Major Version** with `0.1.0`).
+3. Choose a **Dependency Rule** (e.g. **Up to Next Major Version** with `0.2.0`).
 4. Add **AsyncBox** and, when needed, **AsyncBoxUI** to your target.
 
 ## Products
@@ -75,7 +75,7 @@ final class ItemStore {
 }
 ```
 
-`load` transitions the box to `.loading`, then to `.loaded` or `.error`, and rethrows any error to the caller.
+`load` transitions the box to `.loading`, then to `.loaded` or `.error`, and rethrows the error to the caller.
 
 ## State Transitions
 
@@ -88,6 +88,7 @@ stateDiagram-v2
     initial --> loading: load
     loaded --> loading: load
     error --> loading: load
+    loading --> loading: load(ifLoading: .restart)
 
     state loadResult <<choice>>
     loading --> loadResult: completes
@@ -101,17 +102,14 @@ stateDiagram-v2
     cancellationResult --> error: started from error
 ```
 
-The diagram focuses on transitions performed by `load`. The `succeed`, `fail`,
-and `reset` methods can also be used for direct state transitions.
+The diagram focuses on transitions performed by `load`. The `succeed`, `fail`, and `reset` methods can also be used for direct state transitions.
 
 > [!NOTE]
-> Calling `load` while already loading throws
-> `AsyncBoxLoadError.alreadyLoading` without changing the current state.
+> Calling `load` while already loading returns `false` without running the closure. Pass `ifLoading: .restart` to start a new load instead.
 
 ## SwiftUI
 
-Import `AsyncBoxUI` and use `AsyncBoxStateView` to render content for each
-state:
+Import `AsyncBoxUI` and use `AsyncBoxStateView` to render content for each state:
 
 ```swift
 import AsyncBoxUI
@@ -143,9 +141,9 @@ The default initial view is `Color.clear`, and the default loading view displays
 ## Notes
 
 - Errors preserve the current value by default. An error conforming to `AsyncBoxStateFailure` can set `isValueValid` to `false` to discard it.
-- Cancellation does not become an error state. The box restores the state from before `load` started.
-- An overlapping `load` call throws `AsyncBoxLoadError.alreadyLoading` without changing the current state.
-- `AsyncBox` is `@MainActor` isolated. Callers may use `isLoading` to disable redundant actions before they reach `load`.
+- Cancellation does not become an error state. The box restores the state from before the first `load` started.
+- When the box is reset, transitioned directly, or restarted while a load is running, that load is discarded on completion: `load` returns `false` instead of applying the value or error. `CancellationError` is still rethrown. `.restart` does not cancel the earlier closure.
+- `AsyncBox` is `@MainActor` isolated.
 
 ## References
 
